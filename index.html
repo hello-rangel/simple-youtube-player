@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Youtube Practice Maker</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --card: #1a1d24;
+        --accent: #ff3b30;
+        --accent-hover: #e8362c;
+        --text: #f2f2f2;
+        --text-dim: #9a9ea8;
+        --border: #2a2e37;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at top, #1c1f26, var(--bg));
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--text);
+      }
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      /* Firefox */
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+      .card {
+        width: 100%;
+        max-width: 680px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      }
+      h1 {
+        margin: 0 0 24px;
+        font-size: 22px;
+        font-weight: 600;
+      }
+      .video-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 24px;
+      }
+      .video-wrap iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        background: #12141a;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      .row .field {
+        flex: 1;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      button {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      #startBtn {
+        background: var(--accent);
+        color: white;
+      }
+      #startBtn:hover {
+        background: var(--accent-hover);
+      }
+      #stopBtn,
+      #unpauseBtn {
+        background: #2a2e37;
+        color: var(--text);
+      }
+      #stopBtn:hover,
+      #unpauseBtn:hover {
+        background: #363b46;
+      }
+      .status {
+        margin-top: 18px;
+        padding: 12px 14px;
+        background: #12141a;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--text-dim);
+        display: flex;
+        justify-content: space-between;
+      }
+      .status span.state {
+        color: var(--text);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Youtube Practice Maker</h1>
+
+      <div class="video-wrap">
+        <div id="player"></div>
+      </div>
+
+      <div class="field">
+        <label for="urlInput">YouTube URL</label>
+        <input
+          id="urlInput"
+          type="text"
+          placeholder="https://www.youtube.com/watch?v=..."
+        />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="playInput">Play duration (seconds)</label>
+          <input id="playInput" type="number" min="1" value="10" />
+        </div>
+        <div class="field">
+          <label for="delayInput">Pause duration (seconds)</label>
+          <input id="delayInput" type="number" min="1" value="20" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn">Load &amp; Start</button>
+        <button id="stopBtn">Stop</button>
+        <button id="unpauseBtn">Unpause</button>
+      </div>
+    </div>
+
+    <script>
+      var tag = document.createElement("script")
+      tag.src = "https://www.youtube.com/iframe_api"
+      var firstScriptTag = document.getElementsByTagName("script")[0]
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
+
+      function getYouTubeId(url) {
+        const match = url.match(
+          /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/,
+        )
+        return match ? match[1] : null
+      }
+
+      var player
+      var playerReady = false
+      var cycleActive = false
+      var cycleTimer = null
+      var countdownInterval = null
+      var playSeconds = 10
+      var delaySeconds = 20
+      var phaseEndsAt = 0
+
+      function onYouTubeIframeAPIReady() {
+        player = new YT.Player("player", {
+          height: "390",
+          width: "640",
+          playerVars: { playsinline: 1 },
+          events: {
+            onReady: function () {
+              playerReady = true
+            },
+            onStateChange: onPlayerStateChange,
+          },
+        })
+      }
+
+      // Drives the play -> pause -> wait -> resume loop. Only acts while a
+      // cycle is running, so manual clicks on the YouTube controls after
+      // Stop won't trigger it.
+      function onPlayerStateChange(event) {
+        if (!cycleActive) return
+        clearTimeout(cycleTimer)
+
+        if (event.data === YT.PlayerState.PLAYING) {
+          cycleTimer = setTimeout(function () {
+            player.pauseVideo()
+          }, playSeconds * 1000)
+        } else if (event.data === YT.PlayerState.PAUSED) {
+          cycleTimer = setTimeout(function () {
+            player.playVideo()
+          }, delaySeconds * 1000)
+        }
+      }
+
+      function startVideo() {
+        if (!playerReady) {
+          alert("Player is still loading, try again in a second.")
+          return
+        }
+        var url = document.getElementById("urlInput").value.trim()
+        var videoId = getYouTubeId(url)
+        if (!videoId) {
+          alert("That doesn't look like a valid YouTube URL.")
+          return
+        }
+
+        updateParams()
+
+        clearTimeout(cycleTimer)
+        clearInterval(countdownInterval)
+        cycleActive = true
+        player.loadVideoById(videoId) // autoplays, which fires onPlayerStateChange
+      }
+
+      function stopVideo() {
+        cycleActive = false
+        updateParams()
+        clearTimeout(cycleTimer)
+        clearInterval(countdownInterval)
+        if (player && player.pauseVideo) player.pauseVideo()
+      }
+      function unPause() {
+        cycleActive = true
+        updateParams()
+        if (player && player.pauseVideo) player.playVideo()
+      }
+      function updateParams() {
+        playSeconds =
+          parseFloat(document.getElementById("playInput").value) || 10
+        delaySeconds =
+          parseFloat(document.getElementById("delayInput").value) || 20
+      }
+      document.getElementById("startBtn").addEventListener("click", startVideo)
+      document.getElementById("stopBtn").addEventListener("click", stopVideo)
+      document.getElementById("unpauseBtn").addEventListener("click", unPause)
+    </script>
+  </body>
+</html>
