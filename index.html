@@ -171,6 +171,26 @@
         </div>
       </div>
 
+      <div class="field">
+        <label
+          for="loopInput"
+          style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            margin-bottom: 0;
+          "
+        >
+          <input
+            id="loopInput"
+            type="checkbox"
+            style="width: auto; margin: 0"
+          />
+          Loop current segment
+        </label>
+      </div>
+
       <div class="actions">
         <button id="startBtn">Load &amp; Start</button>
         <button id="stopBtn">Stop</button>
@@ -199,6 +219,7 @@
       var playSeconds = 10
       var delaySeconds = 20
       var phaseEndsAt = 0
+      var segmentStart = null
 
       function onYouTubeIframeAPIReady() {
         player = new YT.Player("player", {
@@ -220,13 +241,24 @@
       function onPlayerStateChange(event) {
         if (!cycleActive) return
         clearTimeout(cycleTimer)
+        var loopOn = document.getElementById("loopInput").checked
 
         if (event.data === YT.PlayerState.PLAYING) {
+          // Record a new segment start unless we're looping an existing one
+          if (!loopOn || segmentStart === null) {
+            segmentStart = player.getCurrentTime()
+          }
           cycleTimer = setTimeout(function () {
             player.pauseVideo()
           }, playSeconds * 1000)
         } else if (event.data === YT.PlayerState.PAUSED) {
           cycleTimer = setTimeout(function () {
+            if (
+              document.getElementById("loopInput").checked &&
+              segmentStart !== null
+            ) {
+              player.seekTo(segmentStart, true)
+            }
             player.playVideo()
           }, delaySeconds * 1000)
         }
@@ -249,11 +281,13 @@
         clearTimeout(cycleTimer)
         clearInterval(countdownInterval)
         cycleActive = true
+        segmentStart = null
         player.loadVideoById(videoId) // autoplays, which fires onPlayerStateChange
       }
 
       function stopVideo() {
         cycleActive = false
+        segmentStart = null
         updateParams()
         clearTimeout(cycleTimer)
         clearInterval(countdownInterval)
